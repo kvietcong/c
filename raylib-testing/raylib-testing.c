@@ -34,7 +34,7 @@ void drawRectangle(DrawableRectangle rectangle) {
 #define GRAVITY -9.8f
 
 void updootPlayer(Player *player, DrawableRectangle elements[], int elementsSize, float deltaTime) {
-    bool hasBeenGrounded = false;
+    bool isOnGround = false;
     int hasHitWall = 0;
 
     const int pX = player->body.x;
@@ -46,11 +46,7 @@ void updootPlayer(Player *player, DrawableRectangle elements[], int elementsSize
         const int elY = elements[i].y;
         const int elWidth = elements[i].width;
         const int elHeight = elements[i].height;
-        // printf(
-        //     "Player: (x %i, y %i, xf %i, yf %i) Element %i: (x %i, y %i, xf %i, yf %i)\n",
-        //     pX, pY, pXf, pYf,
-        //     i, elX, elY, elX+elWidth, elY+elHeight
-        // );
+
         if (pY + pHeight >= elY
             && pY <= elY + 5
             && pX + pWidth >= elX
@@ -58,7 +54,7 @@ void updootPlayer(Player *player, DrawableRectangle elements[], int elementsSize
         ) {
             player->body.y = elY - pHeight;
             player->velocity.y = 0;
-            hasBeenGrounded = true;
+            isOnGround = true;
         }
         if (pX + pWidth >= elX
             && pX <= elX + 5
@@ -78,17 +74,18 @@ void updootPlayer(Player *player, DrawableRectangle elements[], int elementsSize
         }
     }
 
-    player->velocity.x *= hasBeenGrounded ? 0.50 : 0.25,
+    player->velocity.x *= isOnGround ? 0.50 : 0.25,
     player->velocity.y *= 0.98;
 
-    if (hasBeenGrounded) player->boostCharge += 20 * deltaTime;
+    if (isOnGround) player->boostCharge += 20 * deltaTime;
     if (player->boostCharge > player->maxBoost) player->boostCharge = player->maxBoost;
-    if (!hasBeenGrounded) player->velocity.y -= GRAVITY * deltaTime;
+    if (!isOnGround) player->velocity.y -= GRAVITY * deltaTime;
 
     if (IsKeyDown(KEY_D) && hasHitWall <= 0) player->velocity.x += player->speed * deltaTime;
     if (IsKeyDown(KEY_A) && hasHitWall >= 0) player->velocity.x -= player->speed * deltaTime;
-    if (IsKeyDown(KEY_W) && hasBeenGrounded) player->velocity.y -= player->speed * deltaTime;
+    if (IsKeyDown(KEY_W) && isOnGround) player->velocity.y -= player->speed * deltaTime;
     if (IsKeyDown(KEY_SPACE)
+        && !isOnGround
         && (IsKeyDown(KEY_A) || IsKeyDown(KEY_D))
         && player->boostCharge > 0
     ) {
