@@ -3,15 +3,15 @@
 #include "include/raymath.h"
 
 typedef struct Window {
-    int width;
-    int height;
+    unsigned int width;
+    unsigned int height;
 } Window;
 
 typedef struct Player {
     Rectangle rect;
     Color color;
     Vector2 velocity;
-    float speed;
+    float acceleration;
     float jumpStrength;
     float maxBoost;
     float boostCharge;
@@ -23,6 +23,8 @@ Vector2 getTarget(Camera2D camera, Player player);
 void updootPlayer(Player *player, const Rectangle elements[], int elementsSize, float deltaTime);
 
 const float GRAVITY = -9.8;
+
+const int TARGET_FPS = 144;
 const int COLLISION_ALLOWANCE = 2;
 
 int main(void)
@@ -32,17 +34,25 @@ int main(void)
     Color backgroundColor = BLACK;
 
     Player player = {
-        .rect = { 50, 50, 50, 50 },
+        .rect = { 15, 15, 50, 50 },
         .color = RED,
         .velocity = { 0, 0 },
-        .speed = 300, .jumpStrength = 500,
+        .acceleration = 300, .jumpStrength = 3.5,
         .maxBoost = 100, .boostCharge = 0, .boostStrength = 2,
         .mass = 74
     };
 
     Rectangle elements[] = {
+        { -10000, window.height * 2, 20000, 100 },
         { 0, window.height / 2, window.width, 100 },
-        { window.width / 1.5, 0, 100, window.height }
+
+        { 500, 0, 100, window.height },
+        { 450, 300, 50, 10 },
+        { 200, 250, 50, 10 },
+        { 195, 205, 10, 50 },
+        { 300, 160, 50, 10 },
+        { 100, 100, 100, 10 },
+        { 450, 50, 50, 10 },
     };
     const int elementsSize = sizeof(elements) / sizeof(elements[0]);
 
@@ -53,7 +63,7 @@ int main(void)
     camera.zoom = 1.0f;
 
     InitWindow(window.width, window.height, "Raylib Testing");
-    SetTargetFPS(144);
+    SetTargetFPS(TARGET_FPS);
 
     // Main game loop
     while (!WindowShouldClose())
@@ -94,6 +104,7 @@ void updootPlayer(Player *player, const Rectangle elements[], int elementsSize, 
     bool isOnGround = false;
     int hasHitWall = 0;
 
+    // I suck at physix XD
     const int pX = player->rect.x;
     const int pY = player->rect.y;
     const int pHeight = player->rect.height;
@@ -115,31 +126,31 @@ void updootPlayer(Player *player, const Rectangle elements[], int elementsSize, 
         }
         if (pX + pWidth >= elX
             && pX <= elX + COLLISION_ALLOWANCE
-            && ((pY > elY && pY < elY + elHeight)
-                || (pY + pHeight > elY && pY + pHeight < elY + elHeight))
+            && ((pY > elY + COLLISION_ALLOWANCE && pY < elY + elHeight - COLLISION_ALLOWANCE)
+                || (pY + pHeight > elY + COLLISION_ALLOWANCE && pY + pHeight < elY + elHeight - COLLISION_ALLOWANCE))
         ) {
             player->rect.x = elX - pWidth - 1;
             hasHitWall = 1;
         }
         if (pX <= elX + elWidth
             && pX + pWidth >= elX + elWidth - COLLISION_ALLOWANCE
-            && ((pY > elY && pY < elY + elHeight)
-                || (pY + pHeight > elY && pY + pHeight < elY + elHeight))
+            && ((pY > elY + COLLISION_ALLOWANCE && pY < elY + elHeight - COLLISION_ALLOWANCE)
+                || (pY + pHeight > elY + COLLISION_ALLOWANCE && pY + pHeight < elY + elHeight - COLLISION_ALLOWANCE))
         ) {
             player->rect.x = elX + elWidth + 1;
             hasHitWall = -1;
         }
     }
-    player->velocity.x *= isOnGround ? 0.50 : 0.30,
-    player->velocity.y *= 0.98;
+
+    player->velocity.x *= (isOnGround ? 0.50 : 0.40) * deltaTime;
 
     if (isOnGround) player->boostCharge += 40 * deltaTime;
     if (player->boostCharge > player->maxBoost) player->boostCharge = player->maxBoost;
     if (!isOnGround) player->velocity.y -= GRAVITY * deltaTime;
 
-    if (IsKeyDown(KEY_D) && hasHitWall <= 0) player->velocity.x += player->speed * deltaTime;
-    if (IsKeyDown(KEY_A) && hasHitWall >= 0) player->velocity.x -= player->speed * deltaTime;
-    if (IsKeyDown(KEY_W) && isOnGround) player->velocity.y -= player->jumpStrength * deltaTime;
+    if (IsKeyDown(KEY_D) && hasHitWall <= 0) player->velocity.x += player->acceleration * deltaTime;
+    if (IsKeyDown(KEY_A) && hasHitWall >= 0) player->velocity.x -= player->acceleration * deltaTime;
+    if (IsKeyDown(KEY_W) && isOnGround) player->velocity.y -= player->jumpStrength;
     if (IsKeyDown(KEY_SPACE)
         && !isOnGround
         && (IsKeyDown(KEY_A) || IsKeyDown(KEY_D))
