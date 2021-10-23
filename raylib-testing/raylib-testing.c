@@ -34,6 +34,7 @@ const int TARGET_FPS = 144;
 const int COLLISION_ALLOWANCE = 3;
 
 bool goalReached = false;
+bool resetGame = true;
 
 int main(void)
 {
@@ -44,7 +45,11 @@ int main(void)
     InitWindow(window.width, window.height, "Raylib Testing");
     SetTargetFPS(TARGET_FPS);
 
-    Player player = {
+    Player player;
+    RectangleEnv elements[255];
+    int elementsSize = sizeof(elements) / sizeof(elements[0]);
+
+    Player defaultPlayer = {
         .rect = { 15, 15, 50, 50 },
         .color = RED,
         .velocity = { 0, 0 },
@@ -53,7 +58,7 @@ int main(void)
         .mass = 74
     };
 
-    RectangleEnv elements[] = {
+    RectangleEnv defaultElements[] = {
         { { -10000, window.height * 2, 20000, 100 }, GRAY, 1 },
         { { 0, window.height / 2, window.width, 100 }, GRAY, 1 },
         { { 500, 0, 100, window.height }, GRAY, 1 },
@@ -66,7 +71,7 @@ int main(void)
 
         { { 525, -100, 50, 50 }, GREEN, 2 },
     };
-    const int elementsSize = sizeof(elements) / sizeof(elements[0]);
+    const int defaultElementsSize = sizeof(defaultElements) / sizeof(defaultElements[0]);
 
     Camera2D camera = { 0 };
     camera.target = getTarget(camera, player);
@@ -84,6 +89,17 @@ int main(void)
     {
         BeginDrawing();
         {
+            if (resetGame) {
+                player = defaultPlayer;
+                for (int i = 0; i < defaultElementsSize; i++)  {
+                    elements[i] = *(defaultElements + i);
+                }
+                for (int i = defaultElementsSize; i < elementsSize; i++) {
+                    elements[i] = (RectangleEnv) { 0 };
+                }
+                resetGame = false;
+            }
+
             ClearBackground(backgroundColor);
             DrawTexture(backgroundTexture, 0, 0, WHITE);
 
@@ -110,6 +126,11 @@ int main(void)
                 DrawText("YOU WON!",
                          window.width / 2, window.height / 2,
                          72, GREEN);
+            }
+
+            if (IsKeyPressed(KEY_R)) {
+                resetGame = true;
+                goalReached = false;
             }
         }
         EndDrawing();
