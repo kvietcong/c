@@ -19,13 +19,21 @@ typedef struct Player {
     float mass;
 } Player;
 
+typedef struct RectangleEnv {
+    Rectangle rect;
+    Color color;
+    unsigned int state;
+} RectangleEnv;
+
 Vector2 getTarget(Camera2D camera, Player player);
-void updootPlayer(Player *player, const Rectangle elements[], int elementsSize, float deltaTime);
+void updootPlayer(Player* player, const RectangleEnv elements[], int elementsSize, float deltaTime);
+unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n);
 
 const float GRAVITY = -9.8;
-
 const int TARGET_FPS = 144;
-const int COLLISION_ALLOWANCE = 2;
+const int COLLISION_ALLOWANCE = 3;
+
+bool goalReached = false;
 
 int main(void)
 {
@@ -33,6 +41,8 @@ int main(void)
     const Window window = { 1280, 720 };
     Color backgroundColor = BLACK;
 
+    InitWindow(window.width, window.height, "Raylib Testing");
+    SetTargetFPS(TARGET_FPS);
     Player player = {
         .rect = { 15, 15, 50, 50 },
         .color = RED,
@@ -42,17 +52,18 @@ int main(void)
         .mass = 74
     };
 
-    Rectangle elements[] = {
-        { -10000, window.height * 2, 20000, 100 },
-        { 0, window.height / 2, window.width, 100 },
+    RectangleEnv elements[] = {
+        { { -10000, window.height * 2, 20000, 100 }, GRAY, 1 },
+        { { 0, window.height / 2, window.width, 100 }, GRAY, 1 },
+        { { 500, 0, 100, window.height }, GRAY, 1 },
+        { { 450, 300, 50, 10 }, GRAY, 1 },
+        { { 200, 250, 50, 10 }, GRAY, 1 },
+        { { 195, 205, 10, 50 }, GRAY, 1 },
+        { { 300, 160, 50, 10 }, GRAY, 1 },
+        { { 100, 100, 100, 10 }, GRAY, 1 },
+        { { 450, 50, 50, 10 }, GRAY, 1 },
 
-        { 500, 0, 100, window.height },
-        { 450, 300, 50, 10 },
-        { 200, 250, 50, 10 },
-        { 195, 205, 10, 50 },
-        { 300, 160, 50, 10 },
-        { 100, 100, 100, 10 },
-        { 450, 50, 50, 10 },
+        { { 525, -100, 50, 50 }, GREEN, 2 },
     };
     const int elementsSize = sizeof(elements) / sizeof(elements[0]);
 
@@ -86,11 +97,22 @@ int main(void)
             BeginMode2D(camera);
             {
                 for (int i = 0; i < elementsSize; i++) {
-                    DrawRectangleRec(elements[i], GRAY);
+                    DrawRectangleRec(elements[i].rect, elements[i].color);
                 }
                 DrawRectangleRec(player.rect, player.color);
             }
             EndMode2D();
+
+            DrawFPS(0, 0);
+            char boostChargeText[32];
+            sprintf(boostChargeText, "Boost Fuel: %i/%i",
+                (int) player.boostCharge, (int) player.maxBoost);
+            DrawText(boostChargeText, 25, window.height - 50, 25, BLUE);
+            if (goalReached) {
+                DrawText("YOU WON!",
+                         window.width / 2, window.height / 2,
+                         72, GREEN);
+            }
         }
         EndDrawing();
     }
@@ -100,45 +122,61 @@ int main(void)
     return 0;
 }
 
-void updootPlayer(Player *player, const Rectangle elements[], int elementsSize, float deltaTime) {
+unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n) {
+    return item & (1 << n);
+}
+
+void updootPlayer(
+    Player* player,
+    const RectangleEnv elements[], int elementsSize,
+    float deltaTime
+) {
     bool isOnGround = false;
     int hasHitWall = 0;
 
-    // I suck at physix XD
-    const int pX = player->rect.x;
-    const int pY = player->rect.y;
-    const int pHeight = player->rect.height;
-    const int pWidth = player->rect.width;
+    int pX = player->rect.x, pY = player->rect.y,
+        pH = player->rect.height, pW = player->rect.width;
     for (int i = 0; i < elementsSize; i++) {
-        const int elX = elements[i].x;
-        const int elY = elements[i].y;
-        const int elWidth = elements[i].width;
-        const int elHeight = elements[i].height;
+        if (
+            checkUnsignedIntBit(elements[i].state, 1)
+            && CheckCollisionRecs(player->rect, elements[i].rect)
+        ) goalReached = true;
 
-        if (pY + pHeight >= elY
-            && pY <= elY + COLLISION_ALLOWANCE
-            && pX + pWidth >= elX
-            && pX < elX + elWidth
+        // Check for collidable flag (first bit)
+        if (!checkUnsignedIntBit(elements[i].state, 0)) continue;
+
+        const int eX = elements[i].rect.x, eY = elements[i].rect.y,
+                  eW = elements[i].rect.width, eH = elements[i].rect.height;
+        if (pY + pH > eY + COLLISION_ALLOWANCE
+            && pY < eY + eH - COLLISION_ALLOWANCE
         ) {
-            player->rect.y = elY - pHeight;
-            player->velocity.y = 0;
-            isOnGround = true;
+            if (pX + pW > eX + eW && pX < eX + eW) {
+                player->rect.x = eX + eW;
+                hasHitWall = 1;
+                pX = eX + eW;
+                player->velocity.x = 0;
         }
-        if (pX + pWidth >= elX
-            && pX <= elX + COLLISION_ALLOWANCE
-            && ((pY > elY + COLLISION_ALLOWANCE && pY < elY + elHeight - COLLISION_ALLOWANCE)
-                || (pY + pHeight > elY + COLLISION_ALLOWANCE && pY + pHeight < elY + elHeight - COLLISION_ALLOWANCE))
-        ) {
-            player->rect.x = elX - pWidth - 1;
+            if (pX < eX && pX + pW > eX) {
+                player->rect.x = eX - pW;
             hasHitWall = 1;
+                pX = eX - pW;
+                player->velocity.x = 0;
         }
-        if (pX <= elX + elWidth
-            && pX + pWidth >= elX + elWidth - COLLISION_ALLOWANCE
-            && ((pY > elY + COLLISION_ALLOWANCE && pY < elY + elHeight - COLLISION_ALLOWANCE)
-                || (pY + pHeight > elY + COLLISION_ALLOWANCE && pY + pHeight < elY + elHeight - COLLISION_ALLOWANCE))
+        }
+        if (pX + pW > eX + COLLISION_ALLOWANCE
+            && pX < eX + eW - COLLISION_ALLOWANCE
         ) {
-            player->rect.x = elX + elWidth + 1;
-            hasHitWall = -1;
+            if (pY + pH > eY + eH && pY < eY + eH) {
+                player->rect.y = eY + eH;
+                pY = eY + eH;
+                player->velocity.y = 0;
+            }
+            if (pY <= eY && pY + pH >= eY) {
+                player->rect.y = eY - pH;
+                pY = eY - pH;
+                isOnGround = true;
+                player->velocity.y = 0;
+            }
         }
     }
 
