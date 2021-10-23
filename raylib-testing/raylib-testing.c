@@ -43,6 +43,7 @@ int main(void)
 
     InitWindow(window.width, window.height, "Raylib Testing");
     SetTargetFPS(TARGET_FPS);
+
     Player player = {
         .rect = { 15, 15, 50, 50 },
         .color = RED,
@@ -73,8 +74,10 @@ int main(void)
     camera.rotation = 0.0f;
     camera.zoom = 1.0f;
 
-    InitWindow(window.width, window.height, "Raylib Testing");
-    SetTargetFPS(TARGET_FPS);
+    // Image loading must happen after window initialization
+    Image backgroundImage = LoadImage("./resources/space.png");
+    Texture2D backgroundTexture = LoadTextureFromImage(backgroundImage);
+    UnloadImage(backgroundImage);
 
     // Main game loop
     while (!WindowShouldClose())
@@ -82,12 +85,7 @@ int main(void)
         BeginDrawing();
         {
             ClearBackground(backgroundColor);
-
-            DrawFPS(0, 0);
-            char boostChargeText[100];
-            sprintf(boostChargeText, "Boost Fuel: %i/%i",
-                (int) player.boostCharge, (int) player.maxBoost);
-            DrawText(boostChargeText, 25, window.height - 50, 25, BLUE);
+            DrawTexture(backgroundTexture, 0, 0, WHITE);
 
             const float deltaTime = GetFrameTime();
 
@@ -117,6 +115,7 @@ int main(void)
         EndDrawing();
     }
 
+    UnloadTexture(backgroundTexture);
     CloseWindow();
 
     return 0;
@@ -155,13 +154,13 @@ void updootPlayer(
                 hasHitWall = 1;
                 pX = eX + eW;
                 player->velocity.x = 0;
-        }
+            }
             if (pX < eX && pX + pW > eX) {
                 player->rect.x = eX - pW;
-            hasHitWall = 1;
+                hasHitWall = 1;
                 pX = eX - pW;
                 player->velocity.x = 0;
-        }
+            }
         }
         if (pX + pW > eX + COLLISION_ALLOWANCE
             && pX < eX + eW - COLLISION_ALLOWANCE
