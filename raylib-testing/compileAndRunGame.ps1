@@ -1,5 +1,5 @@
 <# Raylib Compile & Run Script #>
-<# I should probably make a Make file or something XD #>>
+<# I should probably make a Make file or something XD #>
 
 gcc <# Compile Game with GCC #> `
     raylib-testing.c <# Entry-Point C File #> `

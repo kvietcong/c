@@ -28,10 +28,11 @@ typedef struct RectangleEnv {
 Vector2 getTarget(Camera2D camera, Player player);
 void updootPlayer(Player* player, const RectangleEnv elements[], int elementsSize, float deltaTime);
 unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n);
+void printRec(RectangleEnv rec);
 
 const float GRAVITY = -9.8;
 const int TARGET_FPS = 144;
-const int COLLISION_ALLOWANCE = 3;
+const int COLLISION_ALLOWANCE = 5;
 
 bool goalReached = false;
 bool resetGame = true;
@@ -144,6 +145,10 @@ int main(void)
 
 unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n) {
     return item & (1 << n);
+}
+
+void printRec(Rectangle rec) {
+    printf("(x: %f, y: %f, width: %f, height: %f)\n", rec.x, rec.y, rec.width, rec.height);
 }
 
 void updootPlayer(
