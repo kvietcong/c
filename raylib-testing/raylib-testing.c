@@ -20,6 +20,8 @@ typedef struct Player
     float boostCharge;
     float boostStrength;
     float mass;
+    int direction;
+    int isMoving;
 } Player;
 
 typedef struct RectangleEnv
@@ -46,6 +48,7 @@ bool isChangingFrames = false;
 bool goalReached = false;
 bool resetGame = true;
 int maxFPS = 144;
+bool debugMode = false;
 
 int main(void)
 {
@@ -56,12 +59,31 @@ int main(void)
     if (!isChangingFrames) { SetConfigFlags(FLAG_VSYNC_HINT); }
     InitWindow(window.width, window.height, "Raylib Testing");
 
-    Image backgroundImage = LoadImage("./resources/space.png");
-    Texture2D backgroundTexture = LoadTextureFromImage(backgroundImage);
-    UnloadImage(backgroundImage);
+    const Image skeletonImage = LoadImage("resources/skeleton.png");
+    ImageResize(&skeletonImage, 500, 250);
+    UnloadImage(skeletonImage);
+    const Texture2D skeletonSpritesheet = LoadTextureFromImage(skeletonImage);
+    const Texture2D backgroundTexture = LoadTexture("./resources/space.png");
+
+    const int skeletonWidth = skeletonSpritesheet.width / 10;
+    const int skeletonHeight = skeletonSpritesheet.height / 5;
+    int currentMovementFrame = 0;
+    const Rectangle skeletonMovingRects[] = {
+        { 0,                    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth,        skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 2,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 3,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 4,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 5,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 6,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 7,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 8,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+        { skeletonWidth * 9,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
+    };
+    float timeSinceLastFrame = 0.0;
 
     Player defaultPlayer = {
-        .rect = {15, 15, 50, 50},
+        .rect = {0, 0, 30, 50},
         .color = RED,
         .velocity = {0, 0},
         .acceleration = 300,
@@ -69,7 +91,8 @@ int main(void)
         .maxBoost = 100,
         .boostCharge = 0,
         .boostStrength = 2,
-        .mass = 74
+        .mass = 74,
+        .direction = 1,
     };
 
     Player player;
@@ -111,6 +134,7 @@ int main(void)
 
         float frameDeltaTime = GetFrameTime();
         frameTotalTitleElapsed += frameDeltaTime;
+        timeSinceLastFrame += frameDeltaTime;
 
         if (resetGame)
         {
@@ -145,6 +169,7 @@ int main(void)
         }
 
         if (IsKeyPressed(KEY_R)) { resetGame = true; }
+        if (IsKeyPressed(KEY_F3)) { debugMode = !debugMode; }
 
         BeginDrawing();
         {
@@ -157,7 +182,37 @@ int main(void)
                 {
                     DrawRectangleRec(elements[i].rect, elements[i].color);
                 }
-                DrawRectangleRec(player.rect, player.color);
+                if (debugMode) DrawRectangleRec(player.rect, player.color);
+
+                if (player.isMoving)
+                {
+                    if (timeSinceLastFrame >= (1.0 / 30.0))
+                    {
+                        currentMovementFrame = (currentMovementFrame + 1) % 10;
+                        timeSinceLastFrame = 0.0;
+                    }
+                }
+                else
+                {
+                    currentMovementFrame = 0;
+                    timeSinceLastFrame = 0.0;
+                }
+
+                const Rectangle skeletonMovingRect =
+                    skeletonMovingRects[currentMovementFrame];
+
+                DrawTextureRec(
+                    skeletonSpritesheet,
+                    (Rectangle)
+                    {
+                        skeletonMovingRect.x,
+                        skeletonMovingRect.y,
+                        player.direction ? skeletonMovingRect.width
+                                         : -skeletonMovingRect.width,
+                        skeletonMovingRect.height
+                    },
+                    (Vector2){player.rect.x - 10, player.rect.y},
+                    WHITE);
             }
             EndMode2D();
 
@@ -178,6 +233,7 @@ int main(void)
     }
 
     UnloadTexture(backgroundTexture);
+    UnloadTexture(skeletonSpritesheet);
     CloseWindow();
 
     return EXIT_SUCCESS;
@@ -259,6 +315,7 @@ void updootPlayer(
     }
 
     player->velocity.x *= (isOnGround ? 0.50 : 0.40) * deltaTime;
+    player-> isMoving = false;
 
     if (isOnGround)
         player->boostCharge += 40 * deltaTime;
@@ -266,10 +323,18 @@ void updootPlayer(
         player->boostCharge = player->maxBoost;
     if (!isOnGround)
         player->velocity.y -= GRAVITY * deltaTime;
-    if (IsKeyDown(KEY_D) && hasHitWall <= 0)
-        player->velocity.x += player->acceleration * deltaTime;
-    if (IsKeyDown(KEY_A) && hasHitWall >= 0)
-        player->velocity.x -= player->acceleration * deltaTime;
+    if (IsKeyDown(KEY_D)) {
+        if (hasHitWall <= 0)
+            player->velocity.x += player->acceleration * deltaTime;
+        player->direction = 1;
+        player->isMoving = true;
+    }
+    if (IsKeyDown(KEY_A)) {
+        if (hasHitWall >= 0)
+            player->velocity.x -= player->acceleration * deltaTime;
+        player->direction = 0;
+        player->isMoving = true;
+    }
     if (IsKeyDown(KEY_W) && isOnGround)
         player->velocity.y -= player->jumpStrength;
     if (IsKeyDown(KEY_SPACE)
