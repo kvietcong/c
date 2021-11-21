@@ -9,10 +9,11 @@ typedef struct Window
     unsigned int height;
 } Window;
 
+// TODO: Move to state machine representation
 typedef struct Player
 {
     Rectangle rect;
-    Color color;
+    Color debugColor;
     Vector2 velocity;
     float acceleration;
     float jumpStrength;
@@ -22,6 +23,8 @@ typedef struct Player
     float mass;
     int direction;
     int isMoving;
+    int currentFrame;
+    float timeSinceLastFrame;
 } Player;
 
 typedef struct RectangleEnv
@@ -35,7 +38,7 @@ void printVec2(Vector2 rec);
 void printRec(Rectangle rec);
 Vector2 getTarget(Camera2D camera, Player player);
 unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n);
-void updootPlayer(Player *player,
+void updatePlayer(Player *player,
                   const RectangleEnv elements[],
                   int elementsSize,
                   float deltaTime);
@@ -46,9 +49,9 @@ const double PHYSICS_DELTA = 1.0 / 128.0;
 
 bool isChangingFrames = false;
 bool goalReached = false;
+bool isDebugging = false;
 bool resetGame = true;
 int maxFPS = 144;
-bool debugMode = false;
 
 int main(void)
 {
@@ -59,32 +62,28 @@ int main(void)
     if (!isChangingFrames) { SetConfigFlags(FLAG_VSYNC_HINT); }
     InitWindow(window.width, window.height, "Raylib Testing");
 
-    const Image skeletonImage = LoadImage("resources/skeleton.png");
+    char winMessage[] = "You Win!";
+    const int winMessageFontSize = 72;
+    Vector2 winMessageSize = MeasureTextEx(
+        GetFontDefault(),
+        winMessage,
+        winMessageFontSize,
+        GetFontDefault().baseSize
+    );
+
+    Image skeletonImage = LoadImage("resources/skeleton.png");
     ImageResize(&skeletonImage, 500, 250);
     UnloadImage(skeletonImage);
+
     const Texture2D skeletonSpritesheet = LoadTextureFromImage(skeletonImage);
     const Texture2D backgroundTexture = LoadTexture("./resources/space.png");
 
     const int skeletonWidth = skeletonSpritesheet.width / 10;
     const int skeletonHeight = skeletonSpritesheet.height / 5;
-    int currentMovementFrame = 0;
-    const Rectangle skeletonMovingRects[] = {
-        { 0,                    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth,        skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 2,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 3,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 4,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 5,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 6,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 7,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 8,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-        { skeletonWidth * 9,    skeletonHeight * 2, skeletonWidth, skeletonHeight },
-    };
-    float timeSinceLastFrame = 0.0;
 
     Player defaultPlayer = {
         .rect = {0, 0, 30, 50},
-        .color = RED,
+        .debugColor = (Color){255, 0, 0, 100},
         .velocity = {0, 0},
         .acceleration = 300,
         .jumpStrength = 3.5,
@@ -93,6 +92,7 @@ int main(void)
         .boostStrength = 2,
         .mass = 74,
         .direction = 1,
+        .currentFrame = 0,
     };
 
     Player player;
@@ -130,12 +130,21 @@ int main(void)
     // Main game loop
     while (!WindowShouldClose())
     {
-        if (isChangingFrames) { SetTargetFPS(maxFPS); }
-
+        // Timing Logic (Fixed Physics Update with varied rendering FPS)
         float frameDeltaTime = GetFrameTime();
+        physicsTimeToCatchUp += frameDeltaTime;
         frameTotalTitleElapsed += frameDeltaTime;
-        timeSinceLastFrame += frameDeltaTime;
+        player.timeSinceLastFrame += frameDeltaTime;
+        while (physicsTimeToCatchUp >= PHYSICS_DELTA)
+        {
+            camera.target = getTarget(camera, player);
+            updatePlayer(&player, elements, elementsSize, PHYSICS_DELTA);
 
+            physicsTimeToCatchUp -= PHYSICS_DELTA;
+            physicsTotalTimeElapsed += PHYSICS_DELTA;
+        }
+
+        // Go back to original game state when resetting
         if (resetGame)
         {
             isChangingFrames = false;
@@ -144,32 +153,21 @@ int main(void)
 
             player = defaultPlayer;
             for (int i = 0; i < defaultElementsSize; i++)
-            {
                 elements[i] = *(defaultElements + i);
-            }
             for (int i = defaultElementsSize; i < elementsSize; i++)
-            {
                 elements[i] = (RectangleEnv){0};
-            }
 
             resetGame = false;
         }
 
-        if (IsKeyPressed(KEY_EQUAL)) { maxFPS += 20; }
-        if (IsKeyPressed(KEY_MINUS)) { maxFPS -= 20; }
-
-        physicsTimeToCatchUp += frameDeltaTime;
-        while (physicsTimeToCatchUp >= PHYSICS_DELTA)
-        {
-            camera.target = getTarget(camera, player);
-            updootPlayer(&player, elements, elementsSize, PHYSICS_DELTA);
-
-            physicsTimeToCatchUp -= PHYSICS_DELTA;
-            physicsTotalTimeElapsed += PHYSICS_DELTA;
-        }
-
+        // Debugging
         if (IsKeyPressed(KEY_R)) { resetGame = true; }
-        if (IsKeyPressed(KEY_F3)) { debugMode = !debugMode; }
+        if (IsKeyPressed(KEY_F3)) { isDebugging = !isDebugging; }
+        if (isChangingFrames) {
+            SetTargetFPS(maxFPS);
+            if (IsKeyPressed(KEY_EQUAL)) { maxFPS += 20; }
+            if (IsKeyPressed(KEY_MINUS)) { maxFPS -= 20; }
+        }
 
         BeginDrawing();
         {
@@ -178,56 +176,52 @@ int main(void)
 
             BeginMode2D(camera);
             {
+                // Draw Environment
                 for (int i = 0; i < elementsSize; i++)
                 {
                     DrawRectangleRec(elements[i].rect, elements[i].color);
                 }
-                if (debugMode) DrawRectangleRec(player.rect, player.color);
 
-                if (player.isMoving)
-                {
-                    if (timeSinceLastFrame >= (1.0 / 30.0))
-                    {
-                        currentMovementFrame = (currentMovementFrame + 1) % 10;
-                        timeSinceLastFrame = 0.0;
-                    }
-                }
-                else
-                {
-                    currentMovementFrame = 0;
-                    timeSinceLastFrame = 0.0;
-                }
-
-                const Rectangle skeletonMovingRect =
-                    skeletonMovingRects[currentMovementFrame];
-
+                // Draw Player
                 DrawTextureRec(
                     skeletonSpritesheet,
                     (Rectangle)
                     {
-                        skeletonMovingRect.x,
-                        skeletonMovingRect.y,
-                        player.direction ? skeletonMovingRect.width
-                                         : -skeletonMovingRect.width,
-                        skeletonMovingRect.height
+                        skeletonWidth * player.currentFrame,
+                        skeletonHeight * 2,
+                        skeletonWidth * (player.direction ? 1 : -1),
+                        skeletonHeight
                     },
-                    (Vector2){player.rect.x - 10, player.rect.y},
+                    (Vector2)
+                    {
+                        player.rect.x + (player.rect.width - skeletonWidth) / 2,
+                        player.rect.y
+                    },
                     WHITE);
+                // Player Hitbox
+                if (isDebugging)
+                    DrawRectangleRec(player.rect, player.debugColor);
             }
             EndMode2D();
 
-            DrawFPS(0, 0);
+            // Draw the win message
+            if (goalReached)
+            {
+                DrawText(winMessage,
+                        (window.width - winMessageSize.x) / 2,
+                        (window.height - winMessageSize.y) / 2,
+                        winMessageFontSize, GREEN);
+            }
+
+
+            // Boost Indicator
             char boostChargeText[32];
             sprintf(boostChargeText, "Boost Fuel: %i/%i",
                     (int)player.boostCharge, (int)player.maxBoost);
             DrawText(boostChargeText, 25, window.height - 50, 25, BLUE);
 
-            if (goalReached)
-            {
-                DrawText("YOU WON!",
-                         window.width / 2, window.height / 2,
-                         72, GREEN);
-            }
+            // More Debugging
+            if (isDebugging) DrawFPS(0, 0);
         }
         EndDrawing();
     }
@@ -239,22 +233,8 @@ int main(void)
     return EXIT_SUCCESS;
 }
 
-unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n)
-{
-    return item & (1 << n);
-}
-
-void printVec2(Vector2 vec) {
-    printf("(%f, %f)\n", vec.x, vec.y);
-}
-
-void printRec(Rectangle rec)
-{
-    printf("(x: %f, y: %f, width: %f, height: %f)\n",
-           rec.x, rec.y, rec.width, rec.height);
-}
-
-void updootPlayer(
+// Main game logic
+void updatePlayer(
     Player *player,
     const RectangleEnv elements[], int elementsSize,
     float deltaTime)
@@ -350,6 +330,35 @@ void updootPlayer(
 
     player->rect.x += player->velocity.x;
     player->rect.y += player->velocity.y;
+
+    // Increment player animation frames
+    if (player->isMoving && player->timeSinceLastFrame >= (1.0 / 30.0))
+    {
+            player->currentFrame = (player->currentFrame + 1) % 10;
+            player->timeSinceLastFrame = 0.0;
+    }
+    if (!player->isMoving)
+    {
+        player->currentFrame = 0;
+        player->timeSinceLastFrame = 0.0;
+    }
+}
+
+// HELPER FUNCTIONS
+
+unsigned int checkUnsignedIntBit(unsigned int item, unsigned int n)
+{
+    return item & (1 << n);
+}
+
+void printVec2(Vector2 vec) {
+    printf("(%f, %f)\n", vec.x, vec.y);
+}
+
+void printRec(Rectangle rec)
+{
+    printf("(x: %f, y: %f, width: %f, height: %f)\n",
+           rec.x, rec.y, rec.width, rec.height);
 }
 
 Vector2 getTarget(Camera2D camera, Player player)
